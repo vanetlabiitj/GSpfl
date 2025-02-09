@@ -40,7 +40,6 @@ Currently the work is under submission to IJCAI.
 
 ## License
 
-[Specify the license type, e.g., MIT, Apache 2.0, or state that the code is for research purposes only.]
 
 ## Contact
 
