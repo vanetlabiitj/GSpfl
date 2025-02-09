@@ -221,35 +221,6 @@ def read_weights_agcn(cid):
         concat_weights = sd_matrixing_agcn(loaded_weights, cid)
         return concat_weights
 
-
-class FocalTverskyLoss(nn.Module):
-    def __init__(self, alpha=0.5, beta=0.5, gamma=1, smooth=1e-6):
-        super(FocalTverskyLoss, self).__init__()
-        self.alpha = alpha
-        self.beta = beta
-        self.gamma = gamma
-        self.smooth = smooth
-
-    def forward(self, outputs, targets):
-        # Flatten tensors to 2D (batch_size x num_classes)
-        outputs = outputs.view(outputs.size(0), -1)
-        targets = targets.view(targets.size(0), -1)
-        # Calculate Tversky numerator and denominator
-        true_positives = torch.sum(outputs * targets, dim=1)
-        false_positives = torch.sum(outputs * (1 - targets), dim=1)
-        false_negatives = torch.sum((1 - outputs) * targets, dim=1)
-        tversky_num = true_positives + self.smooth
-        tversky_denom = true_positives + self.alpha * false_positives + self.beta * false_negatives + self.smooth
-        # Calculate Tversky loss
-        tversky_loss = 1.0 - (tversky_num / tversky_denom)
-        # Apply focal loss
-        focal_loss = torch.pow(tversky_loss, self.gamma)
-        # Average the focal loss over all samples
-        focal_tversky_loss = focal_loss.mean()
-
-        return focal_tversky_loss
-
-
 class FocalLoss(nn.Module):
     def __init__(self, alpha=0.25, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
@@ -650,25 +621,6 @@ class FedGCNStrategy(fl.server.strategy.Strategy):
         file_path = os.path.join("../GSpfl/store_weights", f"weights_after_gcn.pkl")
         with open(file_path, "wb") as f:
             pickle.dump(new_weights_results, f)
-
-        # num_malicious = 2
-        # # For each client, take the n-f-2 closest parameters vectors
-        # num_closest = max(1, len(adj_matrix) - num_malicious - 2)
-        # closest_indices = []
-        # for distance in adj_matrix:
-        #     closest_indices.append(
-        #         np.argsort(distance)[1: num_closest + 1].tolist()  # noqa: E203
-        #     )
-        #
-        #     # Compute the score for each client, that is the sum of the distances
-        #     # of the n-f-2 closest parameters vectors
-        # scores = [
-        #     np.sum(adj_matrix[i, closest_indices[i]])
-        #     for i in range(len(adj_matrix))
-        # ]
-        # to_keep = len(adj_matrix) - num_malicious
-        # best_indices = np.argsort(scores)[::-1][len(scores) - to_keep:]  # noqa: E203
-        # best_results = [new_weights_results[i] for i in best_indices]
 
         # Iterate over results
         agg_macro, agg_micro = [], []
