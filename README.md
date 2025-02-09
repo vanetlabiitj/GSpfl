@@ -1,5 +1,5 @@
 # GSpfl
-# Research Code for [Graph Structured Personalized Federated Learning for Spatio-temporal Crime Prediction with Skewed Data]
+# Graph Structured Personalized Federated Learning for Spatio-temporal Crime Prediction with Skewed Data
 
 This repository contains the code and datasets used in our research paper.
 
