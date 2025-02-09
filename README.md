@@ -7,7 +7,7 @@ This repository contains the code and datasets used in our research paper.
 
 ```
 ├── data/                # Dataset files (if applicable)
-├── src/                 # Source code for the experiments
+├── Gspfl/                 # Source code for the experiments
 ├── Utils/              # Trained models or scripts to train models
 ├── requirements.txt     # List of dependencies
 ├── supplementary.pdf     # List of dependencies
