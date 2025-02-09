@@ -255,33 +255,6 @@ def read_weights_agcn(cid):
         concat_weights = sd_matrixing_agcn(loaded_weights, cid)
         return concat_weights
 
-class FocalTverskyLoss(nn.Module):
-    def __init__(self, alpha=0.5, beta=0.5, gamma=1, smooth=1e-6):
-        super(FocalTverskyLoss, self).__init__()
-        self.alpha = alpha
-        self.beta = beta
-        self.gamma = gamma
-        self.smooth = smooth
-
-    def forward(self, outputs, targets):
-        # Flatten tensors to 2D (batch_size x num_classes)
-        outputs = outputs.view(outputs.size(0), -1)
-        targets = targets.view(targets.size(0), -1)
-        # Calculate Tversky numerator and denominator
-        true_positives = torch.sum(outputs * targets, dim=1)
-        false_positives = torch.sum(outputs * (1 - targets), dim=1)
-        false_negatives = torch.sum((1 - outputs) * targets, dim=1)
-        tversky_num = true_positives + self.smooth
-        tversky_denom = true_positives + self.alpha * false_positives + self.beta * false_negatives + self.smooth
-        # Calculate Tversky loss
-        tversky_loss = 1.0 - (tversky_num / tversky_denom)
-        # Apply focal loss
-        focal_loss = torch.pow(tversky_loss, self.gamma)
-        # Average the focal loss over all samples
-        focal_tversky_loss = focal_loss.mean()
-
-        return focal_tversky_loss
-
 class FocalLoss(nn.Module):
     def __init__(self, alpha=0.25, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
@@ -301,32 +274,11 @@ class FocalLoss(nn.Module):
         else:
             return focal_loss
 
-class DynamicWeightedBCELoss(nn.Module):
-    def __init__(self, num_classes):
-        super(DynamicWeightedBCELoss, self).__init__()
-        self.weights = nn.Parameter(torch.ones(num_classes), requires_grad=True)
-
-    def forward(self, outputs, targets):
-        # Apply sigmoid activation to outputs
-        #outputs = torch.sigmoid(outputs)
-
-        # Compute binary cross-entropy loss
-        bce_loss = F.binary_cross_entropy(outputs, targets, reduction='none')
-        #weights = torch.tensor([1.0,1.0,])
-        # Apply class weights
-        weighted_bce_loss = bce_loss * self.weights
-        #print("I am weights",self.weights)
-
-        # Average the loss over all samples
-        loss = torch.mean(weighted_bce_loss)
-        return loss
-
 def train(net, personalize_param, global_param, trainloader, learning_rate, server_round, cid, epochs: int):
     """Train the network on the training set."""
     all_predictions, all_labels = [], []
-    criterion = torch.nn.BCELoss()
-    #criterion = FocalLoss(alpha=0.25,gamma=2,reduction='mean')
-    #criterion = FocalTverskyLoss(alpha=0.5, beta=0.5, gamma=1, smooth=1e-6)
+    #criterion = torch.nn.BCELoss()
+    criterion = FocalLoss(alpha=0.25,gamma=2,reduction='mean')
     optimizer = torch.optim.Adam(list(net.parameters()) + list(criterion.parameters()), lr=learning_rate, weight_decay=1e-4)
     correct_train, total_train, epoch_loss_train = 0, 0, 0.0
     net.train()
@@ -366,9 +318,8 @@ def train(net, personalize_param, global_param, trainloader, learning_rate, serv
 def val(net, testloader):
     """Evaluate the network on the entire test set."""
     all_predictions, all_labels, macro, micro = [], [], [], []
-    criterion = torch.nn.BCELoss()
-    #criterion = FocalLoss(alpha=0.25, gamma=2, reduction='mean')
-    #criterion = FocalTverskyLoss(alpha=0.5, beta=0.5, gamma=1, smooth=1e-6)
+    #criterion = torch.nn.BCELoss()
+    criterion = FocalLoss(alpha=0.25, gamma=2, reduction='mean')
     correct, total, loss = 0, 0, 0.0
     net.eval()
     with torch.no_grad():
@@ -392,9 +343,8 @@ def val(net, testloader):
 def test(net, testloader):
     """Evaluate the network on the entire test set."""
     all_predictions, all_labels, macro, micro = [], [], [], []
-    criterion = torch.nn.BCELoss()
-    #criterion = FocalLoss(alpha=0.25, gamma=2, reduction='mean')
-    #criterion = FocalTverskyLoss(alpha=0.5, beta=0.5, gamma=1, smooth=1e-6)
+    #criterion = torch.nn.BCELoss()
+    criterion = FocalLoss(alpha=0.25, gamma=2, reduction='mean')
     correct, total, loss = 0, 0, 0.0
     net.eval()
     with torch.no_grad():
@@ -413,7 +363,6 @@ def test(net, testloader):
     macro_f1 = f1_score(all_labels, all_predictions, average='macro')
     micro_f1 = f1_score(all_labels, all_predictions, average='micro')
     class_report = classification_report(all_labels, all_predictions)
-
 
     return loss, accuracy, micro_f1, macro_f1, class_report
 
@@ -461,15 +410,10 @@ class FlowerNumPyClient(fl.client.NumPyClient):
         loss, accuracy, micro, macro, class_report = test(self.net, self.testloader)
         print(f" Evaluate Test loss {loss}, Test accuracy {accuracy}, micro F1 {micro}, macro F1 {macro}")
 
-        #print("I am server round of evaluate", server_round)
-        if server_round == 50:
+        if server_round == 100:
             file_path_class = "../store_results/class_wise_report.txt"
             with open(file_path_class, "a") as file:
                 file.write(f"{self.cid},{class_report}\n")
-
-            # file_path_f2 = "../store_results/class_wise_f2.txt"
-            # with open(file_path_f2, "a") as file:
-            #     file.write(f"{self.cid},{f2_score}\n")
 
             file_path = "../store_results/evaluate_client_results.txt"
             # Open the file for writing
@@ -669,17 +613,11 @@ class FedGCNStrategy(fl.server.strategy.Strategy):
         adj_matrix_u = np.triu(adj_matrix)  # Upper triangular part
         np.fill_diagonal(adj_matrix_u, 0)
 
-        if server_round == 49:
+        if server_round == 100:
             os.makedirs("../GSpfl/store_weights", exist_ok=True)
             file_path_cka = os.path.join("../GSpfl/store_weights", f"weights_50.pkl")
             with open(file_path_cka, "wb") as f:
                 pickle.dump(client_weights, f)
-        if server_round == 5:
-            os.makedirs("../GSpfl/store_weights", exist_ok=True)
-            file_path_cka = os.path.join("../GSpfl/store_weights", f"weights_5.pkl")
-            with open(file_path_cka, "wb") as f:
-                pickle.dump(client_weights, f)
-
 
         # Create adjacency matrix as edge indices for PyTorch Geometric
         edge_index = torch.tensor(np.array(np.nonzero(adj_matrix)), dtype=torch.long)
@@ -721,26 +659,6 @@ class FedGCNStrategy(fl.server.strategy.Strategy):
         file_path = os.path.join("../GSpfl/store_weights", f"weights_after_gcn.pkl")
         with open(file_path, "wb") as f:
                pickle.dump(new_weights_results, f)
-
-
-        # num_malicious = 2
-        # # For each client, take the n-f-2 closest parameters vectors
-        # num_closest = max(1, len(adj_matrix) - num_malicious - 2)
-        # closest_indices = []
-        # for distance in adj_matrix:
-        #     closest_indices.append(
-        #         np.argsort(distance)[1: num_closest + 1].tolist()  # noqa: E203
-        #     )
-        #
-        #     # Compute the score for each client, that is the sum of the distances
-        #     # of the n-f-2 closest parameters vectors
-        # scores = [
-        #     np.sum(adj_matrix[i, closest_indices[i]])
-        #     for i in range(len(adj_matrix))
-        # ]
-        # to_keep = len(adj_matrix) - num_malicious
-        # best_indices = np.argsort(scores)[::-1][len(scores) - to_keep:]  # noqa: E203
-        # best_results = [new_weights_results[i] for i in best_indices]
 
         # Iterate over results
         agg_macro, agg_micro = [], []
@@ -839,7 +757,7 @@ client_resources = {"num_cpus": 1, "num_gpus": 0.0}
 history = fl.simulation.start_simulation(
     client_fn=numpyclient_fn,
     num_clients=NUM_CLIENTS,
-    config=fl.server.ServerConfig(num_rounds=50),
+    config=fl.server.ServerConfig(num_rounds=100),
     strategy= FedGCNStrategy(),
     client_resources=client_resources,
 )
