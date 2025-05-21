@@ -1,5 +1,5 @@
 # GSpfl
-# Graph Structured Personalized Federated Learning for Spatio-temporal Crime Prediction with Skewed Data
+# Handling Dual Skewness in Citywide Crime Prediction using Personalized Graph Federated Learning
 
 This repository contains the code and datasets used in our research paper.
 
@@ -36,7 +36,7 @@ The datasets are publicly available by the authors of paper titled "CrimeForecas
 
 ## Citation
 
-Currently the work is under submission to IJCAI.
+Currently the work is under submission.
 
 ## License
 
