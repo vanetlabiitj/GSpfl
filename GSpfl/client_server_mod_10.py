@@ -255,30 +255,37 @@ def read_weights_agcn(cid):
         concat_weights = sd_matrixing_agcn(loaded_weights, cid)
         return concat_weights
 
-class FocalLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2, reduction='mean'):
-        super(FocalLoss, self).__init__()
+class FocalTverskyLoss(nn.Module):
+    def __init__(self, alpha=0.5, beta=0.5, gamma=1, smooth=1e-6):
+        super(FocalTverskyLoss, self).__init__()
         self.alpha = alpha
+        self.beta = beta
         self.gamma = gamma
-        self.reduction = reduction
+        self.smooth = smooth
 
     def forward(self, outputs, targets):
-        bce_loss = F.binary_cross_entropy_with_logits(outputs, targets, reduction='none')
-        pt = torch.exp(-bce_loss)
-        focal_loss = self.alpha * (1 - pt) ** self.gamma * bce_loss
-
-        if self.reduction == 'mean':
-            return torch.mean(focal_loss)
-        elif self.reduction == 'sum':
-            return torch.sum(focal_loss)
-        else:
-            return focal_loss
+        # Flatten tensors to 2D (batch_size x num_classes)
+        outputs = outputs.view(outputs.size(0), -1)
+        targets = targets.view(targets.size(0), -1)
+        # Calculate Tversky numerator and denominator
+        true_positives = torch.sum(outputs * targets, dim=1)
+        false_positives = torch.sum(outputs * (1 - targets), dim=1)
+        false_negatives = torch.sum((1 - outputs) * targets, dim=1)
+        tversky_num = true_positives + self.smooth
+        tversky_denom = true_positives + self.alpha * false_positives + self.beta * false_negatives + self.smooth
+        # Calculate Tversky loss
+        tversky_loss = 1.0 - (tversky_num / tversky_denom)
+        # Apply focal loss
+        focal_loss = torch.pow(tversky_loss, self.gamma)
+        # Average the focal loss over all samples
+        focal_tversky_loss = focal_loss.mean()
+        return focal_tversky_loss
 
 def train(net, personalize_param, global_param, trainloader, learning_rate, server_round, cid, epochs: int):
     """Train the network on the training set."""
     all_predictions, all_labels = [], []
     #criterion = torch.nn.BCELoss()
-    criterion = FocalLoss(alpha=0.25,gamma=2,reduction='mean')
+    criterion = FocalTverskyLoss(alpha=0.5, beta=0.5, gamma=1, smooth=1e-6)
     optimizer = torch.optim.Adam(list(net.parameters()) + list(criterion.parameters()), lr=learning_rate, weight_decay=1e-4)
     correct_train, total_train, epoch_loss_train = 0, 0, 0.0
     net.train()
@@ -319,7 +326,7 @@ def val(net, testloader):
     """Evaluate the network on the entire test set."""
     all_predictions, all_labels, macro, micro = [], [], [], []
     #criterion = torch.nn.BCELoss()
-    criterion = FocalLoss(alpha=0.25, gamma=2, reduction='mean')
+    criterion = FocalTverskyLoss(alpha=0.5, beta=0.5, gamma=1, smooth=1e-6)
     correct, total, loss = 0, 0, 0.0
     net.eval()
     with torch.no_grad():
@@ -344,7 +351,7 @@ def test(net, testloader):
     """Evaluate the network on the entire test set."""
     all_predictions, all_labels, macro, micro = [], [], [], []
     #criterion = torch.nn.BCELoss()
-    criterion = FocalLoss(alpha=0.25, gamma=2, reduction='mean')
+    criterion = FocalTverskyLoss(alpha=0.5, beta=0.5, gamma=1, smooth=1e-6)
     correct, total, loss = 0, 0, 0.0
     net.eval()
     with torch.no_grad():
